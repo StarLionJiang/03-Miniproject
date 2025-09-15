@@ -7,7 +7,7 @@ import time
 # --- Configuration ---
 # Students should populate this list with the IP address(es) of their Pico
 PICO_IPS = [
-    "192.168.8.101",
+    "172.20.10.11",
 ]
 
 
@@ -26,7 +26,7 @@ def get_device_status(ip):
         sensor_res = requests.get(f"http://{ip}/sensor", timeout=1)
         sensor_res.raise_for_status()
         sensor_data = sensor_res.json()
-        status["norm"] = float(sensor_data.get("norm", 0.0))
+        status["norm"] = sensor_data.get("norm", 0.0)
 
     except requests.exceptions.RequestException as e:
         status["status"] = f"Offline ({type(e).__name__})"
@@ -36,18 +36,20 @@ def get_device_status(ip):
 
 def render_dashboard(statuses):
     """Renders the collected statuses to the console."""
+
     print("--- Pico Orchestra Dashboard --- (Press Ctrl+C to exit)")
     print("-" * 60)
-    print(f"{'IP Address':<16} {'Device ID':<25} {'Status':<18} {'Light Level':<20}")
+    print(f"{'IP Address':<16} {'Device ID':<25} {'Status':<10} {'Light Level':<20}")
     print("-" * 60)
 
     for status in statuses:
-        light_level = max(0.0, min(1.0, status.get("norm", 0.0)))
+        # Create a simple bar graph for the light level
+        light_level = status.get("norm", 0.0)
         bar_length = int(light_level * 10)
         bar = "█" * bar_length + "─" * (10 - bar_length)
 
         print(
-            f"{status['ip']:<16} {status.get('device_id','N/A'):<25} {status['status']:<18} "
+            f"{status['ip']:<16} {status['device_id']:<25} {status['status'].capitalize():<10} "
             f"[{bar}] {light_level:.2f}"
         )
 
