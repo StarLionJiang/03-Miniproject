@@ -223,7 +223,7 @@ async def handle_request(reader, writer):
             notes = data["notes"]
             # Extract parameters
             duty = 0.5
-            gap_ms = data["gap_ms"]
+            gap_ms = data["gap_ms"] / 1000
             num_notes = len(data["notes"])
 
             # If a note is already playing via API, cancel it first
