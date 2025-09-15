@@ -156,7 +156,44 @@ async def handle_request(reader, writer):
         status_line = "HTTP/1.0 200 OK\r\n"
         content_type = "application/json"
 
+  elif method == "GET" and url == "/health":
+        device_ok = True
+        errors = []
 
+      # ✅ Wi-Fi check (inline, no function)
+        if not wlan.isconnected():
+          device_ok = False
+          errors.append("Wi-Fi disconnected")
+
+    # Build the response
+        response = {
+        "status": "ok" if device_ok else "error",
+        "device_id": "pico-w-A1B2C3D4E5F6",
+        "api": "1.0.0"
+        }
+        if errors:
+          response["errors"] = errors
+
+        response_bytes = json.dumps(response)
+
+    # HTTP status
+        status_line = (
+            "HTTP/1.0 200 OK\r\n"
+            if device_ok
+            else "HTTP/1.0 503 Service Unavailable\r\n"
+        )
+        content_type = "application/json"
+
+    # Send HTTP headers
+        writer.write(status_line.encode())
+        writer.write(f"Content-Type: {content_type}\r\n".encode())
+        writer.write(f"Content-Length: {len(response_bytes)}\r\n".encode())
+        writer.write(b"\r\n")
+        writer.write(response_bytes.encode())
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+  
     elif method == "POST" and url == "/play_note":
         # This requires reading the request body, which is not trivial.
         # A simple approach for a known content length:
