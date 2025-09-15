@@ -216,6 +216,47 @@ async def handle_request(reader, writer):
             await writer.wait_closed()
             return
 
+    elif method == "POST" and url == "/melody":
+        raw_data = await reader.read(1024)
+        try:
+            data = json.loads(raw_data)
+            notes = data["notes"]
+            # Extract parameters
+            duty = 0.5
+            gap_ms = data["gap_ms"]
+            num_notes = len(data["notes"])
+
+            # If a note is already playing via API, cancel it first
+            if api_note_task:
+                api_note_task.cancel()
+
+            # play sequence of notes
+            for i, note in enumerate(notes):
+                freq = note["freq"]
+                ms = note["ms"]
+
+                # Play the note
+                api_note_task = asyncio.create_task(play_api_note(freq, ms, duty))
+                await api_note_task  # wait for the note to finish
+
+                # Gap between notes (skip after the last one)
+                if i < num_notes - 1 and gap_s > 0:
+                    await asyncio.sleep(gap_ms)
+
+            # Prepare response (202 Accepted)
+            response = json.dumps({
+                "queued": num_notes,
+            })
+            status_line = "HTTP/1.0 202 Accepted\r\n"
+            content_type = "application/json"
+
+        except (ValueError, json.JSONDecodeError):
+            writer.write(b'HTTP/1.0 400 Bad Request\r\n\r\n{"error": "Invalid JSON"}\r\n')
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+            return
+
     elif method == "POST" and url == "/stop":
         if api_note_task:
             api_note_task.cancel()
