@@ -121,14 +121,14 @@ curl -X POST http://<pico-ip>/stop
 
 ## Architecture & Dataflow
 
-![Architecture](doc/img/architecture.png)
+
 
 ```
       Ambient Light            Wi‑Fi / HTTP
-           │                       ▲
+           │                      ▲
    LDR + Divider (GP26/ADC0)      │
-           │ (ADC u16)            │         ┌───────────────┐
-    ┌──────▼───────┐        ┌─────┴─────┐   │ dashboard.py  │
+           │ (ADC u16)            │          ┌───────────────┐
+    ┌──────▼───────┐        ┌─────┴──────┐   │ dashboard.py  │
     │  main.py     │        │ Web Client │   │ conductor.py  │
     │              │◄──────►│  (PC/Mac)  │   └───────────────┘
     │  map → freq  │  API   └────────────┘

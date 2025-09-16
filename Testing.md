@@ -1,5 +1,22 @@
 # Testing Plan
 
+## Hardware Bring‑Up: Blink Test (Pico LED)
+
+Use this minimal program to verify the board boots and runs MicroPython tasks. It blinks the onboard LED.
+
+> Save as `blink.py` and run, or temporarily replace `main.py` for bring‑up.  
+- [ ] LED visibly blinks. If not, check power, firmware, and that the LED pin is correct for your Pico/Pico W build.
+## Speaker / Buzzer Bench Tests
+
+Use interactive snippet to validate PWM audio, duty control, and note mapping. It takes a frequency, snaps to the nearest musical note, and plays it on the buzzer.
+
+- [ ] Audible tone is produced; changing input frequency changes the played note.
+- [ ] Optional: verify with a chromatic tuner app that the played note matches within ~±2%.
+- [ ] Duty at `30000/65535 ≈ 46%`. Avoid prolonged testing at very high duty to prevent overheating.
+
+**API cross‑check (optional)**
+- Compare local PWM test to `POST /play_note` with the same target note to confirm consistent pitch.
+
 ## Connectivity
 - [ ] Boot and obtain IP within 10 s.
 - [ ] `GET /health` returns `{"status":"ok","device_id":"..."}`.

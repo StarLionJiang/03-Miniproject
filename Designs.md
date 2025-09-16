@@ -10,7 +10,21 @@ Turn ambient light variations into musical pitches on Raspberry Pi Pico W, and c
 - **Orchestration**: `dashboard.py` and `conductor.py` (PC/Mac)
 
 ## Dataflow
-See the architecture diagram: `doc/img/architecture.png`
+
+```
+      Ambient Light            Wi‑Fi / HTTP
+           │                      ▲
+   LDR + Divider (GP26/ADC0)      │
+           │ (ADC u16)            │          ┌───────────────┐
+    ┌──────▼───────┐        ┌─────┴──────┐   │ dashboard.py  │
+    │  main.py     │        │ Web Client │   │ conductor.py  │
+    │              │◄──────►│  (PC/Mac)  │   └───────────────┘
+    │  map → freq  │  API   └────────────┘
+    │  freq_to_note│
+    │  PWM (GP15)  │────────► Buzzer (piezo)
+    └──────────────┘
+```
+
 
 ## Concurrency & Priority
 - Two concurrent tasks (via `asyncio`):
