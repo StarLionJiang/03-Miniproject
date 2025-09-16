@@ -155,6 +155,17 @@ Two mapping strategies were explored:
 
 ---
 
+## Frequency to Note Logic
+
+- Input frequency is obtained and rounded to nearest note using a known musical formula 
+- Notes are mapped to their corresponding MIDI value
+- Note name and octave is extracted using modulo and integer division
+- Frequency of note is then returned by the function, which is sent to the buzzer
+
+**Note**: The frequency is first converted to a note and then converted back to the corresponding frequency. We only want the buzzer to play musical notes, rather than random frequencies that sound off-pitch. We round the frequency to a note and convert back to a frequency in order to avoid having to create a dictionary entry for every note and frequency.
+
+---
+
 ## Testing (quick checklist)
 
 - Connectivity: `/health` returns `ok` with `device_id`.
