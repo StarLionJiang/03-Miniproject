@@ -8,24 +8,30 @@ import json
 import math
 import asyncio
 
-A4_FREQ = 440.0   # Hz
-A4_MIDI = 69      # MIDI note number for A4
-NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F",
-              "F#", "G", "G#", "A", "A#", "B"]
-
 # --- Pin Configuration ---
 # The photosensor is connected to an Analog-to-Digital Converter (ADC) pin.
 # We will read the voltage, which changes based on light.
 photo_sensor_pin = machine.ADC(26)
 
+# --- App Constants (tunable) ---
+MIN_LIGHT = 24000       # expected dark threshold
+MAX_LIGHT = 60000       # expected bright threshold
+
+BASE_NOTE_HZ = 261.626     # C4 base frequency
+OCTAVES = 2                # two octaves
+SEMITONES_PER_OCTAVE = 12
+TOTAL_STEPS = OCTAVES * SEMITONES_PER_OCTAVE  # 24 semitones
+DUTY = 300                 # sound noise：0~65535
+
 # The buzzer is connected to a GPIO pin that supports Pulse Width Modulation (PWM).
 # PWM allows us to create a square wave at a specific frequency to make a sound.
-buzzer_pin = machine.PWM(machine.Pin(15))
+buzzer_pin = machine.PWM(machine.Pin(18))
 
 # --- Global State ---
 # This variable will hold the task that plays a note from an API call.
 # This allows us to cancel it if a /stop request comes in.
 api_note_task = None
+api_lock_until_ms = 0  # Used to prohibit light control
 
 # --- Core Functions ---
 
@@ -35,6 +41,10 @@ def connect_to_wifi(wifi_config: str = "wifi_config.json"):
 
     This expects a JSON text file 'wifi_config.json' with 'ssid' and 'password' keys,
     which would look like
+    {
+        "ssid": "your_wifi_ssid",
+        "password": "your_wifi_password"
+    }
     """
     data = {
         "ssid": "Group_2/3",
@@ -69,25 +79,29 @@ def connect_to_wifi(wifi_config: str = "wifi_config.json"):
 def play_tone(frequency: int, duration_ms: int) -> None:
     """Plays a tone on the buzzer for a given duration."""
     if frequency > 0:
-        buzzer_pin.freq(int(frequency))
-        buzzer_pin.duty_u16(32768)  # 50% duty cycle
+        q_step = freq_to_nearest_step(float(frequency))
+        q_freq = int(step_to_freq(q_step))
+        buzzer_pin.freq(q_freq)
+        buzzer_pin.duty_u16(DUTY)
         time.sleep_ms(duration_ms)  # type: ignore[attr-defined]
         stop_tone()
     else:
         time.sleep_ms(duration_ms)  # type: ignore[attr-defined]
-
 
 def stop_tone():
     """Stops any sound from playing."""
     buzzer_pin.duty_u16(0)  # 0% duty cycle means silence
 
 
-async def play_api_note(frequency, duration_s, duty=0.5):
+async def play_api_note(frequency, duration_s):
     """Coroutine to play a note from an API call, can be cancelled."""
     try:
         print(f"API playing note: {frequency}Hz for {duration_s}s")
-        buzzer_pin.freq(int(frequency))
-        buzzer_pin.duty_u16(65536*duty)  # 50% duty cycle
+        extend_api_lock(duration_s * 1000 + 2000)
+        q_step = freq_to_nearest_step(float(frequency))
+        q_freq = int(step_to_freq(q_step))
+        buzzer_pin.freq(q_freq)
+        buzzer_pin.duty_u16(DUTY)
         await asyncio.sleep(duration_s)
         stop_tone()
         print("API note finished.")
@@ -99,6 +113,50 @@ async def play_api_note(frequency, duration_s, duty=0.5):
 def map_value(x, in_min, in_max, out_min, out_max):
     """Maps a value from one range to another."""
     return (x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min
+
+def clamp(x, lo, hi):
+    return lo if x < lo else hi if x > hi else x
+
+def get_device_id():
+    uid = machine.unique_id()  # bytes
+    return ''.join('{:02x}'.format(b) for b in uid)
+
+def extend_api_lock(ms):
+    """Extend the suppression window by ms milliseconds (from the current time)"""
+    global api_lock_until_ms
+    api_lock_until_ms = time.ticks_add(time.ticks_ms(), int(ms))
+
+def step_to_freq(step: int) -> float:
+    """Semitones -> Frequency"""
+    if step < 0:
+        step = 0
+    elif step > TOTAL_STEPS:
+        step = TOTAL_STEPS
+    return BASE_NOTE_HZ * (2 ** (step / 12.0))
+
+def freq_to_nearest_step(freq: float) -> int:
+    """Any frequency -> steps to the nearest semitone (relative to C4), clamped to 0..TOTAL_STEPS"""
+    if freq <= 0:
+        return 0
+    semi = round(12.0 * (math.log(freq / BASE_NOTE_HZ) / math.log(2.0)))
+    if semi < 0:
+        semi = 0
+    elif semi > TOTAL_STEPS:
+        semi = TOTAL_STEPS
+    return int(semi)
+
+def light_to_nearest_step(raw_adc: int) -> int:
+    """ADC raw value -> nearest semitone step (linearly mapped to 0..TOTAL_STEPS and rounded)"""
+    clamped = clamp(raw_adc, MIN_LIGHT, MAX_LIGHT)
+    if MAX_LIGHT == MIN_LIGHT:
+        return 0
+    t = (clamped - MIN_LIGHT) / (MAX_LIGHT - MIN_LIGHT)  # 0..1
+    step = round(t * TOTAL_STEPS)  # 0..24
+    if step < 0:
+        step = 0
+    elif step > TOTAL_STEPS:
+        step = TOTAL_STEPS
+    return int(step)
 
 
 async def handle_request(reader, writer):
@@ -141,16 +199,16 @@ async def handle_request(reader, writer):
         """
         response = html
         status_line = "HTTP/1.0 200 OK\r\n"
-
+        
     elif method == "GET" and url == "/sensor":
-        # Normalize to [0.0, 1.0]
-        norm = light_value  / 65535
-
+        raw = photo_sensor_pin.read_u16()
+        clamped = clamp(raw, MIN_LIGHT, MAX_LIGHT)
+        norm = 0.0 if MAX_LIGHT == MIN_LIGHT else (clamped - MIN_LIGHT) / (MAX_LIGHT - MIN_LIGHT)
         # Rough lux estimate
         lux_est = norm * 200 
-
+        
         response = json.dumps({
-            "raw": light_value,
+            "raw": raw,
             "norm": round(norm, 2),
             "lux_est": round(lux_est, 1)
         })
@@ -161,7 +219,7 @@ async def handle_request(reader, writer):
         device_ok = True
         errors = []
 
-        # ✅ Wi-Fi check (inline, no function)
+        # Wi-Fi check (inline, no function)
         if not wlan.isconnected():
             device_ok = False
             errors.append("Wi-Fi disconnected")
@@ -169,7 +227,7 @@ async def handle_request(reader, writer):
     # Build the response
         response = {
         "status": "ok" if device_ok else "error",
-        "device_id": "pico-w-A1B2C3D4E5F6",
+        "device_id": get_device_id(),
         "api": "1.0.0"
         }
         if errors:
@@ -182,7 +240,7 @@ async def handle_request(reader, writer):
             else "HTTP/1.0 503 Service Unavailable\r\n"
         )
         content_type = "application/json"
-  
+        
     elif method == "POST" and url == "/play_note":
         # This requires reading the request body, which is not trivial.
         # A simple approach for a known content length:
@@ -194,6 +252,8 @@ async def handle_request(reader, writer):
             freq = data.get("frequency", 0)
             duration = data.get("duration", 0)
 
+            extend_api_lock(duration * 1000 + 2000)
+
             # If a note is already playing via API, cancel it first
             if api_note_task:
                 api_note_task.cancel()
@@ -202,7 +262,6 @@ async def handle_request(reader, writer):
             api_note_task = asyncio.create_task(play_api_note(freq, duration))
 
             response = '{"status": "ok", "message": "Note playing started."}'
-            status_line = "HTTP/1.0 200 OK\r\n"
             content_type = "application/json"
         except (ValueError, json.JSONDecodeError):
             writer.write(b'HTTP/1.0 400 Bad Request\r\n\r\n{"error": "Invalid JSON"}\r\n')
@@ -210,7 +269,7 @@ async def handle_request(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-        
+
     elif method == "POST" and url == "/tone":
         raw_data = await reader.read(1024)
         try:
@@ -241,7 +300,6 @@ async def handle_request(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-
     elif method == "POST" and url == "/melody":
         raw_data = await reader.read(1024)
         try:
@@ -269,7 +327,7 @@ async def handle_request(reader, writer):
                 if i < num_notes - 1 and gap_ms > 0:
                     await asyncio.sleep(gap_ms)
 
-            # Prepare response (202 Accepted)
+        # Prepare response (202 Accepted)
             response = json.dumps({
                 "queued": num_notes,
             })
@@ -282,7 +340,7 @@ async def handle_request(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-
+            
     elif method == "POST" and url == "/stop":
         if api_note_task:
             api_note_task.cancel()
@@ -290,7 +348,7 @@ async def handle_request(reader, writer):
         stop_tone()  # Force immediate stop
         response = '{"status": "ok", "message": "All sounds stopped."}'
         content_type = "application/json"
-    
+        
     else:
         writer.write(b"HTTP/1.0 404 Not Found\r\n\r\n")
         await writer.drain()
@@ -303,30 +361,11 @@ async def handle_request(reader, writer):
         f"{status_line}Content-type: {content_type}\r\n\r\n".encode("utf-8")
     )
     writer.write(response.encode("utf-8"))
+    writer.write(response.encode("utf-8"))
     await writer.drain()
     writer.close()
     await writer.wait_closed()
     print("Client disconnected")
-    
-def freq_to_note(freq):
-    if freq <= 0:
-        return None, None
-
-    # Convert frequency to nearest MIDI note number
-    midi = round(12 * math.log2(freq / A4_FREQ) + A4_MIDI)
-
-    # Clamp between C1 (MIDI 24) and A7 (MIDI 93)
-    midi = max(24, min(93, midi))
-
-    # Note name + octave
-    note_name = NOTE_NAMES[midi % 12]
-    octave = (midi // 12) - 1
-    note_label = f"{note_name}{octave}"
-
-    # Exact frequency of that note
-    note_freq = A4_FREQ * (2 ** ((midi - A4_MIDI) / 12))
-
-    return note_freq
 
 
 async def main():
@@ -334,7 +373,8 @@ async def main():
     try:
         ip = connect_to_wifi()
         print(f"Starting web server on {ip}...")
-        asyncio.create_task(asyncio.start_server(handle_request, "0.0.0.0", 80))
+        server = await asyncio.start_server(handle_request, "0.0.0.0", 80)
+        print("HTTP server started on port 80")
     except Exception as e:
         print(f"Failed to initialize: {e}")
         return
@@ -342,29 +382,22 @@ async def main():
     # This loop runs the "default" behavior: playing sound based on light
     while True:
         # Only run this loop if no API note is currently scheduled to play
-        if api_note_task is None or api_note_task.done():
-            # Read the sensor. Values range from ~500 (dark) to ~65535 (bright)
+        now = time.ticks_ms()
+        locked = time.ticks_diff(api_lock_until_ms, now) > 0
+
+        if api_note_task is not None and not api_note_task.done():
+            pass
+        elif locked:
+            stop_tone()
+        else:
             light_value = photo_sensor_pin.read_u16()
-            # Map the light value to a frequency range (e.g., A1 to C7)
-            # Adjust the input range based on your room's lighting
-            min_light = 1000
-            max_light = 100000
-            min_freq = 55  # A1
-            max_freq = 2093 # C7
-
-            # Clamp the light value to the expected range
-            clamped_light = max(min_light, min(light_value, max_light))
-
-            if clamped_light > min_light:
-                frequency = map_value(
-                    clamped_light, min_light, max_light, min_freq, max_freq
-                )
-                tuned_freq = int(freq_to_note(frequency))
-                #print(light_value, clamped_light, frequency, tuned_freq)
-                buzzer_pin.freq(tuned_freq)
-                buzzer_pin.duty_u16(32768)  # 50% duty cycle
+            step = light_to_nearest_step(light_value)
+            if step > 0:
+                q_freq = int(step_to_freq(step))
+                buzzer_pin.freq(q_freq)
+                buzzer_pin.duty_u16(DUTY)
             else:
-                stop_tone()  # If it's very dark, be quiet
+                stop_tone()
 
         await asyncio.sleep_ms(50)  # type: ignore[attr-defined]
 
