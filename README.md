@@ -200,12 +200,9 @@ Full plan and scripts: `doc/Testing.md`.
 │  ├─ Designs.md
 │  ├─ Comparisons.md
 │  ├─ Testing.md
-│  ├─ Changelog.md
-│  └─ img/
-│     └─ architecture.png
+│  └─ Changelog.md
 ├─ media/
 │  └─ README.txt       # put demo.mp4 / audio clips here
-├─ wifi_config.json    # not committed to public repos
 └─ README.md
 ```
 
