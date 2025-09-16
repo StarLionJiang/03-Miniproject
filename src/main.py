@@ -266,7 +266,7 @@ async def handle_request(reader, writer):
                 await api_note_task  # wait for the note to finish
 
                 # Gap between notes (skip after the last one)
-                if i < num_notes - 1 and gap_s > 0:
+                if i < num_notes - 1 and gap_ms > 0:
                     await asyncio.sleep(gap_ms)
 
             # Prepare response (202 Accepted)
