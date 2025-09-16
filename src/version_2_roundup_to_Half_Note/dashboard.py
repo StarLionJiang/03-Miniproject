@@ -7,7 +7,7 @@ import time
 # --- Configuration ---
 # Students should populate this list with the IP address(es) of their Pico
 PICO_IPS = [
-    "172.20.10.11",
+    "192.168.10.223",
 ]
 
 
