@@ -23,6 +23,7 @@ Other IDE can be used, including Visual Studio Code or
 
 https://github.com/user-attachments/assets/6497bf12-17d6-4e06-a6e5-461943005262
 
+![image](https://github.com/user-attachments/assets/83f0bfa6-9904-4269-af44-d7886ecc4591)
 
 ## Hardware
 
