@@ -43,7 +43,7 @@ def connect_to_wifi(wifi_config: str = "wifi_config.json"):
 
     # with open(wifi_config, "r") as f:
       #  data = json.load(f)
-
+    global wlan
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(data["ssid"], data["password"])
@@ -127,6 +127,7 @@ async def handle_request(reader, writer):
 
     response = ""
     content_type = "text/html"
+    status_line = "HTTP/1.0 503 Service Unavailable\r\n"
 
     # --- API Endpoint Routing ---
     if method == "GET" and url == "/":
@@ -156,14 +157,14 @@ async def handle_request(reader, writer):
         status_line = "HTTP/1.0 200 OK\r\n"
         content_type = "application/json"
 
-  elif method == "GET" and url == "/health":
+    elif method == "GET" and url == "/health":
         device_ok = True
         errors = []
 
-      # ✅ Wi-Fi check (inline, no function)
+        # ✅ Wi-Fi check (inline, no function)
         if not wlan.isconnected():
-          device_ok = False
-          errors.append("Wi-Fi disconnected")
+            device_ok = False
+            errors.append("Wi-Fi disconnected")
 
     # Build the response
         response = {
@@ -172,9 +173,7 @@ async def handle_request(reader, writer):
         "api": "1.0.0"
         }
         if errors:
-          response["errors"] = errors
-
-        response_bytes = json.dumps(response)
+            response["errors"] = errors
 
     # HTTP status
         status_line = (
@@ -183,16 +182,6 @@ async def handle_request(reader, writer):
             else "HTTP/1.0 503 Service Unavailable\r\n"
         )
         content_type = "application/json"
-
-    # Send HTTP headers
-        writer.write(status_line.encode())
-        writer.write(f"Content-Type: {content_type}\r\n".encode())
-        writer.write(f"Content-Length: {len(response_bytes)}\r\n".encode())
-        writer.write(b"\r\n")
-        writer.write(response_bytes.encode())
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
   
     elif method == "POST" and url == "/play_note":
         # This requires reading the request body, which is not trivial.
