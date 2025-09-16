@@ -59,6 +59,8 @@ An example soundboard showing note frequencies is [clickable](https://muted.io/n
 Over human history, the corresspondance of notes to frequencies has changed over time and location and musical cultures.
 For the question below, feel free to use musical scale of your choice!
 
+[Music Examples](https://github.com/twisst/Music-for-Raspberry-Pi-Pico/blob/main/play.py)
+
 
 ## Notes
 

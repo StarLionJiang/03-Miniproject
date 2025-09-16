@@ -6,19 +6,29 @@ Instead, our MicroPython code will create a web server that implements an API co
 1. Objective
 
 Program your Raspberry Pi Pico W to function as a network-controlled "device service."
-Write separate "conductor" and "dashboard" applications on your computer to interact with one or more Picos, forming a collaborative orchestra. T
-his exercise teaches the fundamentals of API design, networked devices (IoT), and client-server architecture.
+Write a separate "conductor" application on your computer to interact with the Pico 2W over the WiFi network.
+This project uses the fundamentals of API design, networked devices (IoT), and client-server architecture.
 
 2. Architecture
 
-This project has three distinct roles.
-Your team will be responsible for the code on your Pico (the Device Service), but you will also write code on your computer to act as a Conductor and a Dashboard.
+Your team will be responsible for the code on your Pico 2W and code on your computer to act as a Conductor.
 
-* Device Service (runs on each Pico W): This is the core firmware. It connects to Wi-Fi, reads its sensor, and exposes a web API that allows it to be controlled remotely. It knows nothing about music or orchestras; it only knows how to respond to API calls.
-* Conductor (runs on one computer): This application is the "brain" of the orchestra. It contains the logic for a song and sends a coordinated sequence of API calls to all the Device Services to play the music.
-* Dashboard (runs on any computer): This is a monitoring tool. It continuously polls all the devices on the network to display their status, sensor readings, and other information in a user-friendly way.
+* Device Service (main.py runs on each Pico 2W): This is the core firmware. It connects to Wi-Fi, reads the photoresistor (light sensor) and stores this data vs. time, and exposes a web API that allows it to be controlled remotely.
+* Conductor (conductor.py runs on one computer): This application is the "brain" of the orchestra. It contains the logic for a song and sends a coordinated sequence of API calls to all the Device Services to play the music.
 
-3. API Contract (Version 1.0)
+Quantities to read:
+
+* Luminance (light intensity) from the photoresistor.
+
+Quantities to output:
+
+* Sound from the piezo buzzer (pitch and duration).
+
+Future expansion to accommodate in the software:
+
+* Chrominance (color) from a future color-sensing device.
+
+3. API Contract (Version 1.0) feel free to edit!
 All Device Services must implement the following API. This contract is the "language" that allows all our different components to talk to each other.
 
 `GET /health`
