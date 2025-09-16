@@ -6,9 +6,9 @@ import requests
 import time
 
 # --- Configuration ---
-# Students should populate this list with the IP address(es of their Picos
+# Students should populate this list with the IP address(es) of their Picos
 PICO_IPS = [
-    "192.168.10.223",# Replace it with your Pico IP address in your local network
+    "192.168.8.101",
 ]
 
 # --- Music Definition ---
@@ -44,23 +44,23 @@ SONG = [
 # --- Conductor Logic ---
 
 
-def play_note_on_all_picos(freq, ms):
+def play_note_on_all_picos(freq, ms, duty=0.5):
     """Sends a /tone POST request to every Pico in the list."""
     print(f"Playing note: {freq}Hz for {ms}ms on all devices.")
 
-    payload = {"frequency": float(freq), "duration": ms / 1000.0}
+    payload = {"freq": int(freq), "ms": int(ms), "duty": float(duty)}
 
     for ip in PICO_IPS:
-        url = f"http://{ip}/play_note"
+        url = f"http://{ip}/tone"
         try:
-            # We use a short timeout because we don't need to wait for a response
-            # This makes the orchestra play more in sync.
-            requests.post(url, json=payload, timeout=0.1)
+            # Short timeout so we don't block waiting for responses; improves sync
+            requests.post(url, json=payload, timeout=0.2)
         except requests.exceptions.Timeout:
-            # This is expected, we can ignore it
+            # Expected sometimes; ignore for better sync
             pass
         except requests.exceptions.RequestException as e:
             print(f"Error contacting {ip}: {e}")
+
 
 if __name__ == "__main__":
     print("--- Pico Light Orchestra Conductor ---")
@@ -79,9 +79,9 @@ if __name__ == "__main__":
 
         # Play the song
         for note, duration in SONG:
-            play_note_on_all_picos(note, duration)
+            play_note_on_all_picos(note, duration, duty=0.5)
             # Wait for the note's duration plus a small gap before playing the next one
-            time.sleep(duration / 1000 * 1.02)
+            time.sleep(duration / 1000 * 1.1)
 
         print("\nSong finished!")
 
